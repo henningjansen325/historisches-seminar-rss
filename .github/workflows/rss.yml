@@ -23,7 +23,8 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
 
-    steps:- name: Repository laden
+    steps:
+    - name: Repository laden
   uses: actions/checkout@v4
   with:
     ref: main
