@@ -21,6 +21,50 @@ STATE_FILE = Path("events_state.json")
 OUTPUT_FILE = Path("public/feed.xml")
 BERLIN = ZoneInfo("Europe/Berlin")
 
+MONTHS = {
+    "Januar": 1,
+    "Februar": 2,
+    "März": 3,
+    "April": 4,
+    "Mai": 5,
+    "Juni": 6,
+    "Juli": 7,
+    "August": 8,
+    "September": 9,
+    "Oktober": 10,
+    "November": 11,
+    "Dezember": 12,
+}
+
+
+def date_from_heading(link):
+    for heading in link.find_all_previous(
+        ["h2", "h3"]
+    ):
+        text = heading.get_text(" ", strip=True)
+
+        match = re.search(
+            r"(\d{1,2})\.\s+"
+            r"([A-Za-zÄÖÜäöüß]+)\s+"
+            r"(\d{4})",
+            text,
+        )
+
+        if match:
+            day, month_name, year = match.groups()
+            month = MONTHS.get(month_name)
+
+            if month:
+                try:
+                    return datetime(
+                        int(year), month, int(day)
+                    ).date()
+                except ValueError:
+                    pass
+
+    return None
+
+
 
 def field(container, prefix):
     element = container.find(
@@ -67,17 +111,26 @@ def collect_events():
         location = field(link, "Location")
 
         match = re.search(
-            r"(\d{4}-\d{2}-\d{2})(?:/|$)", href
-        )
-        event_date = None
+event_date = date_from_heading(link)
 
-        if match:
-            try:
-                event_date = datetime.strptime(
-                    match.group(1), "%Y-%m-%d"
-                ).date()
-            except ValueError:
-                pass
+if event_date is None:
+    match = re.search(
+        r"(\d{4}-\d{2}-\d{2})(?:/|$)",
+        href,
+    )
+
+    if match:
+        try:
+            event_date = datetime.strptime(
+                match.group(1), "%Y-%m-%d"
+            ).date()
+            print(
+                "WARNUNG: Datum aus URL gelesen:",
+                url,
+            )
+        except ValueError:
+            pass
+
 
         image = link.find("img")
         image_url = (
