@@ -1,8 +1,11 @@
 
+import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 from pathlib import Path
 from urllib.parse import urljoin
+from zoneinfo import ZoneInfo
 
 import requests
 from bs4 import BeautifulSoup
@@ -13,6 +16,11 @@ SOURCE_URL = (
     BASE_URL
     + "/de/historisches-seminar/einzelne-veranstaltungen"
 )
+
+STATE_FILE = Path("events_state.json")
+OUTPUT_FILE = Path("public/feed.xml")
+BERLIN = ZoneInfo("Europe/Berlin")
+
 
 def field(container, prefix):
     element = container.find(
@@ -25,12 +33,11 @@ def field(container, prefix):
     )
     return element.get_text(" ", strip=True) if element else ""
 
+
 def collect_events():
     response = requests.get(
         SOURCE_URL,
-        headers={
-            "User-Agent": "HistorischesSeminarRSS/0.1"
-        },
+        headers={"User-Agent": "HistorischesSeminarRSS/0.2"},
         timeout=30,
     )
     response.raise_for_status()
@@ -49,16 +56,16 @@ def collect_events():
             continue
 
         url = urljoin(BASE_URL, href)
+
         if url in seen:
             continue
         seen.add(url)
 
         title = title_element.get_text(" ", strip=True)
-        time = field(link, "DateLine")
+        time_text = field(link, "DateLine")
         description = field(link, "Description")
         location = field(link, "Location")
 
-        # Datum aus der Veranstaltungs-URL auslesen
         match = re.search(
             r"(\d{4}-\d{2}-\d{2})(?:/|$)", href
         )
@@ -68,7 +75,7 @@ def collect_events():
             try:
                 event_date = datetime.strptime(
                     match.group(1), "%Y-%m-%d"
-                )
+                ).date()
             except ValueError:
                 pass
 
@@ -83,7 +90,7 @@ def collect_events():
             "title": title,
             "url": url,
             "date": event_date,
-            "time": time,
+            "time": time_text,
             "description": description,
             "location": location,
             "image": image_url,
@@ -91,10 +98,31 @@ def collect_events():
 
     return events
 
-def generate_feed(events):
+
+def load_state():
+    if STATE_FILE.exists():
+        return json.loads(STATE_FILE.read_text(
+            encoding="utf-8"
+        ))
+    return {}
+
+
+def save_state(state):
+    STATE_FILE.write_text(
+        json.dumps(
+            state, ensure_ascii=False, indent=2,
+            sort_keys=True
+        ) + "\n",
+        encoding="utf-8",
+    )
+
+
+def generate_feed(events, state):
     fg = FeedGenerator()
     fg.id(SOURCE_URL)
-    fg.title("Historisches Seminar Heidelberg – Veranstaltungen")
+    fg.title(
+        "Historisches Seminar Heidelberg – Veranstaltungen"
+    )
     fg.link(href=SOURCE_URL, rel="alternate")
     fg.description(
         "Veranstaltungen des Historischen Seminars "
@@ -102,12 +130,32 @@ def generate_feed(events):
     )
     fg.language("de")
 
+    now = datetime.now(timezone.utc)
+    today = datetime.now(BERLIN).date()
+    published = 0
+
     for event in events:
+        # Vergangene Termine ausblenden
+        if event["date"] and event["date"] < today:
+            continue
+
+        url = event["url"]
+
+        if url not in state:
+            state[url] = {
+                "first_seen": now.isoformat()
+            }
+
         entry = fg.add_entry()
-        entry.id(event["url"])
-        entry.guid(event["url"], permalink=True)
+        entry.id(url)
+        entry.guid(url, permalink=True)
         entry.title(event["title"])
-        entry.link(href=event["url"])
+        entry.link(href=url)
+
+        first_seen = datetime.fromisoformat(
+            state[url]["first_seen"]
+        )
+        entry.pubDate(first_seen)
 
         parts = []
 
@@ -122,23 +170,25 @@ def generate_feed(events):
             parts.append(event["description"])
         if event["location"]:
             parts.append("Ort: " + event["location"])
-
         if event["image"]:
             parts.append(
                 '<img src="' + event["image"] + '" alt="">'
             )
 
         entry.description("<br>".join(parts))
+        published += 1
 
-    output = Path("public/feed.xml")
-    output.parent.mkdir(parents=True, exist_ok=True)
-    fg.rss_file(str(output), pretty=True)
+    OUTPUT_FILE.parent.mkdir(
+        parents=True, exist_ok=True
+    )
+    fg.rss_file(str(OUTPUT_FILE), pretty=True)
 
-    print(f"RSS-Datei erstellt: {output}")
-    print(f"Anzahl Veranstaltungen: {len(events)}")
+    save_state(state)
 
-    for event in events:
-        print("-", event["title"], event["url"])
+    print(f"RSS-Datei erstellt: {OUTPUT_FILE}")
+    print(f"Veröffentlichte Veranstaltungen: {published}")
+    print(f"Gespeicherte Kennungen: {len(state)}")
+
 
 if __name__ == "__main__":
     events = collect_events()
@@ -146,7 +196,8 @@ if __name__ == "__main__":
     if not events:
         raise RuntimeError(
             "Keine Veranstaltungen gefunden. "
-            "Die HTML-Struktur muss geprüft werden."
+            "Bitte Quellseite prüfen."
         )
 
-    generate_feed(events)
+    state = load_state()
+    generate_feed(events, state)
