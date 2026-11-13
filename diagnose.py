@@ -43,3 +43,23 @@ print("\n--- Textvorschau ---")
 main = soup.select_one("main") or soup.body
 if main:
     print(main.get_text(" ", strip=True)[:3000])
+    
+print("\n--- Veranstaltungscontainer ---")
+
+for link in soup.select('a[href*="/einzelne-veranstaltungen/"]'):
+    href = link.get("href", "")
+
+    if "?overlay=" in href:
+        continue
+
+    print("\nLINK:", href)
+    print("HTML-STRUKTUR:")
+    print(link.parent.prettify()[:5000])
+
+print("\n--- Navigation / Pagination ---")
+for element in soup.select(
+    'a[rel="next"], .pager, .pagination, '
+    '[data-page], [data-offset]'
+):
+    print(str(element)[:1000])
+
