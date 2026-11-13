@@ -1,7 +1,7 @@
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from html import escape
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
@@ -188,6 +188,42 @@ def save_state(state):
     )
 
 
+
+def cleanup_state(state, events, now):
+    active_urls = {event["url"] for event in events}
+    cutoff = now - timedelta(days=90)
+
+    for url in list(state):
+        record = state[url]
+
+        if url in active_urls:
+            record["last_seen"] = now.isoformat()
+            continue
+
+        last_seen_text = record.get(
+            "last_seen",
+            record.get("first_seen")
+        )
+
+        try:
+            last_seen = datetime.fromisoformat(
+                last_seen_text
+            )
+            if last_seen.tzinfo is None:
+                last_seen = last_seen.replace(
+                    tzinfo=timezone.utc
+                )
+        except (ValueError, TypeError):
+            print(
+                "WARNUNG: Ungültiger Zeitstempel:",
+                url,
+            )
+            continue
+
+        if last_seen < cutoff:
+            del state[url]
+            print("Alte Kennung entfernt:", url)
+
 def generate_feed(events, state):
     fg = FeedGenerator()
 
@@ -208,6 +244,7 @@ def generate_feed(events, state):
     now = datetime.now(timezone.utc)
     today = datetime.now(BERLIN).date()
     published = 0
+    cleanup_state(state, events, now)
 
     for event in events:
         # Vergangene Veranstaltungen ausblenden.
