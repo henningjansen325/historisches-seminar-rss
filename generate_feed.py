@@ -130,6 +130,7 @@ def collect_events():
         seen.add(url)
 
         event_date = date_from_heading(link)
+        
 
         if event_date is None:
             event_date = date_from_url(url)
