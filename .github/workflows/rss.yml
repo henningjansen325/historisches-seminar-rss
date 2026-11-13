@@ -24,11 +24,11 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-    - name: Repository laden
-  uses: actions/checkout@v4
-  with:
-    ref: main
-    persist-credentials: true
+      - name: Repository laden
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
 
       - name: Python einrichten
         uses: actions/setup-python@v5
@@ -62,4 +62,3 @@ jobs:
       - name: RSS-Datei veröffentlichen
         id: deployment
         uses: actions/deploy-pages@v4
-
