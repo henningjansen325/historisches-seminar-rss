@@ -92,52 +92,27 @@ def collect_events():
 
     for link in soup.select(
         'a[href*="/einzelne-veranstaltungen/"]'
-    ):
-        href = link.get("href", "")
-        title_element = link.find("h3")
 
-        if not title_element or "?overlay=" in href:
-            continue
+        event_date = date_from_heading(link)
 
-        url = urljoin(BASE_URL, href)
-
-        if url in seen:
-            continue
-        seen.add(url)
-
-        title = title_element.get_text(" ", strip=True)
-        time_text = field(link, "DateLine")
-        description = field(link, "Description")
-        location = field(link, "Location")
-
-        match = re.search(
-event_date = date_from_heading(link)
-
-if event_date is None:
-    match = re.search(
-        r"(\d{4}-\d{2}-\d{2})(?:/|$)",
-        href,
-    )
-
-    if match:
-        try:
-            event_date = datetime.strptime(
-                match.group(1), "%Y-%m-%d"
-            ).date()
-            print(
-                "WARNUNG: Datum aus URL gelesen:",
-                url,
+        if event_date is None:
+            match = re.search(
+                r"(\d{4}-\d{2}-\d{2})(?:/|$)",
+                href,
             )
-        except ValueError:
-            pass
 
+            if match:
+                try:
+                    event_date = datetime.strptime(
+                        match.group(1), "%Y-%m-%d"
+                    ).date()
+                    print(
+                        "WARNUNG: Datum aus URL gelesen:",
+                        url,
+                    )
+                except ValueError:
+                    pass
 
-        image = link.find("img")
-        image_url = (
-            urljoin(BASE_URL, image["src"])
-            if image and image.get("src")
-            else None
-        )
 
         events.append({
             "title": title,
