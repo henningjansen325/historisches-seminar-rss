@@ -90,10 +90,15 @@ def collect_events():
     events = []
     seen = set()
 
-    for link in soup.select(
+        for link in soup.select(
+
         'a[href*="/einzelne-veranstaltungen/"]'
 
-        event_date = date_from_heading(link)
+    ):
+
+        href = link.get("href", "")
+
+        title_element = link.find("h3")
 
         if event_date is None:
             match = re.search(
